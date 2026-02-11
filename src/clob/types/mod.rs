@@ -417,7 +417,24 @@ impl<'de> Deserialize<'de> for TickSize {
     where
         D: Deserializer<'de>,
     {
-        let dec = <Decimal as Deserialize>::deserialize(deserializer)?;
+        // The CLOB API may return tick sizes as a JSON string ("0.001")
+        // or a JSON number (0.001). Handle both forms via serde_json::Value.
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let dec = match &value {
+            serde_json::Value::String(s) => {
+                s.parse::<Decimal>().map_err(de::Error::custom)?
+            }
+            serde_json::Value::Number(n) => {
+                let s = n.to_string();
+                s.parse::<Decimal>().map_err(de::Error::custom)?
+            }
+            other => {
+                return Err(de::Error::custom(format!(
+                    "expected string or number for TickSize, got {:?}",
+                    other
+                )));
+            }
+        };
         TickSize::try_from(dec).map_err(de::Error::custom)
     }
 }

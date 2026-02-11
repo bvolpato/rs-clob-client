@@ -187,7 +187,9 @@ pub struct MarketResponse {
     pub archived: bool,
     pub accepting_orders: bool,
     pub accepting_order_timestamp: Option<DateTime<Utc>>,
+    #[serde(deserialize_with = "empty_string_as_zero")]
     pub minimum_order_size: Decimal,
+    #[serde(deserialize_with = "empty_string_as_zero")]
     pub minimum_tick_size: Decimal,
     /// The market condition ID (unique market identifier).
     #[serde_as(as = "NoneAsEmptyString")]
@@ -207,7 +209,9 @@ pub struct MarketResponse {
     #[serde_as(as = "NoneAsEmptyString")]
     #[serde(default)]
     pub fpmm: Option<Address>,
+    #[serde(deserialize_with = "empty_string_as_zero")]
     pub maker_base_fee: Decimal,
+    #[serde(deserialize_with = "empty_string_as_zero")]
     pub taker_base_fee: Decimal,
     pub notifications_enabled: bool,
     pub neg_risk: bool,
@@ -309,12 +313,22 @@ pub fn empty_string_as_zero<'de, D>(deserializer: D) -> std::result::Result<Deci
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-
-    if s.trim().is_empty() {
-        Ok(Decimal::ZERO)
-    } else {
-        s.parse::<Decimal>().map_err(serde::de::Error::custom)
+    // The CLOB API may return these fields as a JSON string ("0.001"),
+    // a JSON number (0.001), or an empty string (""). Handle all cases.
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match &value {
+        serde_json::Value::String(s) if s.trim().is_empty() => Ok(Decimal::ZERO),
+        serde_json::Value::String(s) => s.parse::<Decimal>().map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => {
+            // Convert numeric JSON values via their string representation
+            let s = n.to_string();
+            s.parse::<Decimal>().map_err(serde::de::Error::custom)
+        }
+        serde_json::Value::Null => Ok(Decimal::ZERO),
+        other => Err(serde::de::Error::custom(format!(
+            "expected string or number for Decimal field, got {:?}",
+            other
+        ))),
     }
 }
 

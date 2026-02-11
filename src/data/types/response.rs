@@ -27,6 +27,49 @@ where
     }
 }
 
+/// Deserializes a Decimal from either a JSON number, string, or null.
+/// The Data API may return numeric fields as JSON numbers (`0.001`) or as
+/// strings (`"0.001"`). Rust's `Decimal` only deserializes from strings by
+/// default, so we need this helper.
+fn decimal_from_any<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match &value {
+        serde_json::Value::String(s) if s.trim().is_empty() => Ok(Decimal::ZERO),
+        serde_json::Value::String(s) => s.parse::<Decimal>().map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => {
+            n.to_string().parse::<Decimal>().map_err(serde::de::Error::custom)
+        }
+        serde_json::Value::Null => Ok(Decimal::ZERO),
+        other => Err(serde::de::Error::custom(format!(
+            "expected string or number for Decimal, got {:?}",
+            other
+        ))),
+    }
+}
+
+/// Like [`decimal_from_any`] but returns `Option<Decimal>`, treating null as `None`.
+fn option_decimal_from_any<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match &value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::String(s) if s.trim().is_empty() => Ok(None),
+        serde_json::Value::String(s) => s.parse::<Decimal>().map(Some).map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => {
+            n.to_string().parse::<Decimal>().map(Some).map_err(serde::de::Error::custom)
+        }
+        other => Err(serde::de::Error::custom(format!(
+            "expected string, number, or null for Option<Decimal>, got {:?}",
+            other
+        ))),
+    }
+}
+
 #[non_exhaustive]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum Market {
@@ -74,24 +117,34 @@ pub struct Position {
     /// The market condition ID (unique market identifier).
     pub condition_id: B256,
     /// Number of outcome tokens held.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub size: Decimal,
     /// Average entry price for the position.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub avg_price: Decimal,
     /// Initial value (cost basis) of the position.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub initial_value: Decimal,
     /// Current market value of the position.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub current_value: Decimal,
     /// Unrealized cash profit/loss.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub cash_pnl: Decimal,
     /// Unrealized percentage profit/loss.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub percent_pnl: Decimal,
     /// Total amount bought (cumulative).
+    #[serde(deserialize_with = "decimal_from_any")]
     pub total_bought: Decimal,
     /// Realized profit/loss from closed portions.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub realized_pnl: Decimal,
     /// Realized percentage profit/loss.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub percent_realized_pnl: Decimal,
     /// Current market price of the outcome.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub cur_price: Decimal,
     /// Whether the position can be redeemed (market resolved).
     pub redeemable: bool,
@@ -138,12 +191,16 @@ pub struct ClosedPosition {
     /// The market condition ID (unique market identifier).
     pub condition_id: B256,
     /// Average entry price for the position.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub avg_price: Decimal,
     /// Total amount bought (cumulative).
+    #[serde(deserialize_with = "decimal_from_any")]
     pub total_bought: Decimal,
     /// Realized profit/loss from the closed position.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub realized_pnl: Decimal,
     /// Final market price when position was closed.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub cur_price: Decimal,
     /// Unix timestamp when the position was closed.
     pub timestamp: i64,
@@ -185,8 +242,10 @@ pub struct Trade {
     /// The market condition ID (unique market identifier).
     pub condition_id: B256,
     /// Number of tokens traded.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub size: Decimal,
     /// Execution price per token.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub price: Decimal,
     /// Unix timestamp when the trade occurred.
     pub timestamp: i64,
@@ -248,12 +307,15 @@ pub struct Activity {
     #[serde(rename = "type")]
     pub activity_type: ActivityType,
     /// Number of tokens involved in the activity.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub size: Decimal,
     /// USDC value of the activity.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub usdc_size: Decimal,
     /// On-chain transaction hash.
     pub transaction_hash: B256,
     /// Price per token (for trades).
+    #[serde(default, deserialize_with = "option_decimal_from_any")]
     pub price: Option<Decimal>,
     /// Outcome token asset identifier
     #[serde(default)]
@@ -327,6 +389,7 @@ pub struct Holder {
     #[serde_as(as = "NoneAsEmptyString")]
     pub pseudonym: Option<String>,
     /// Amount of tokens held.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub amount: Decimal,
     /// Whether the holder's username is publicly visible.
     pub display_username_public: Option<bool>,
@@ -381,6 +444,7 @@ pub struct Value {
     /// The user's address.
     pub user: Address,
     /// Total value of positions in USDC.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub value: Decimal,
 }
 
@@ -394,6 +458,7 @@ pub struct OpenInterest {
     /// The market condition ID
     pub market: Market,
     /// Open interest value in USDC.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub value: Decimal,
 }
 
@@ -406,6 +471,7 @@ pub struct MarketVolume {
     /// The market condition ID
     pub market: Market,
     /// Trading volume in USDC.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub value: Decimal,
 }
 
@@ -418,6 +484,7 @@ pub struct MarketVolume {
 #[non_exhaustive]
 pub struct LiveVolume {
     /// Total trading volume across all markets in the event.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub total: Decimal,
     /// Per-market volume breakdown.
     #[serde(default)]
@@ -440,6 +507,7 @@ pub struct BuilderLeaderboardEntry {
     /// Builder name or identifier.
     pub builder: String,
     /// Total trading volume attributed to this builder.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub volume: Decimal,
     /// Number of active users for this builder.
     pub active_users: i32,
@@ -471,6 +539,7 @@ pub struct BuilderVolumeEntry {
     /// Whether the builder is verified.
     pub verified: bool,
     /// Trading volume for this builder on this date.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub volume: Decimal,
     /// Number of active users for this builder on this date.
     pub active_users: i32,
@@ -498,8 +567,10 @@ pub struct TraderLeaderboardEntry {
     #[serde_as(as = "NoneAsEmptyString")]
     pub user_name: Option<String>,
     /// Trading volume for this trader.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub vol: Decimal,
     /// Profit and loss for this trader.
+    #[serde(deserialize_with = "decimal_from_any")]
     pub pnl: Decimal,
     /// URL to the trader's profile image.
     #[serde(default)]
