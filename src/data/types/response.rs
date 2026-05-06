@@ -39,13 +39,13 @@ where
     match &value {
         serde_json::Value::String(s) if s.trim().is_empty() => Ok(Decimal::ZERO),
         serde_json::Value::String(s) => s.parse::<Decimal>().map_err(serde::de::Error::custom),
-        serde_json::Value::Number(n) => {
-            n.to_string().parse::<Decimal>().map_err(serde::de::Error::custom)
-        }
+        serde_json::Value::Number(n) => n
+            .to_string()
+            .parse::<Decimal>()
+            .map_err(serde::de::Error::custom),
         serde_json::Value::Null => Ok(Decimal::ZERO),
         other => Err(serde::de::Error::custom(format!(
-            "expected string or number for Decimal, got {:?}",
-            other
+            "expected string or number for Decimal, got {other:?}"
         ))),
     }
 }
@@ -59,13 +59,17 @@ where
     match &value {
         serde_json::Value::Null => Ok(None),
         serde_json::Value::String(s) if s.trim().is_empty() => Ok(None),
-        serde_json::Value::String(s) => s.parse::<Decimal>().map(Some).map_err(serde::de::Error::custom),
-        serde_json::Value::Number(n) => {
-            n.to_string().parse::<Decimal>().map(Some).map_err(serde::de::Error::custom)
-        }
+        serde_json::Value::String(s) => s
+            .parse::<Decimal>()
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+        serde_json::Value::Number(n) => n
+            .to_string()
+            .parse::<Decimal>()
+            .map(Some)
+            .map_err(serde::de::Error::custom),
         other => Err(serde::de::Error::custom(format!(
-            "expected string, number, or null for Option<Decimal>, got {:?}",
-            other
+            "expected string, number, or null for Option<Decimal>, got {other:?}"
         ))),
     }
 }

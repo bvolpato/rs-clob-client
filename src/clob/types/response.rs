@@ -326,8 +326,7 @@ where
         }
         serde_json::Value::Null => Ok(Decimal::ZERO),
         other => Err(serde::de::Error::custom(format!(
-            "expected string or number for Decimal field, got {:?}",
-            other
+            "expected string or number for Decimal field, got {other:?}"
         ))),
     }
 }
