@@ -522,13 +522,16 @@ pub fn parse_if_interested(
                 }
 
                 serde_json::from_value(elem.clone())
-                    .inspect_err(|_err| {
+                    .inspect_err(|err| {
                         #[cfg(feature = "tracing")]
                         warn!(
                             event_type = %event_type,
                             error = %err,
                             "Skipping unknown/invalid WS event in batch"
                         );
+
+                        #[cfg(not(feature = "tracing"))]
+                        let _ = &err;
                     })
                     .ok()
             })
