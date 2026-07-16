@@ -273,37 +273,36 @@ async fn request<Response: DeserializeOwned>(
     if matches!(
         method,
         reqwest::Method::POST | reqwest::Method::PUT | reqwest::Method::DELETE
-    ) {
-        if let Ok(proxy_url) = std::env::var("CLOB_PROXY_URL") {
-            let original_url = request.url().to_string();
-            let proxied_url = format!("{}/proxy", proxy_url.trim_end_matches('/'));
+    ) && let Ok(proxy_url) = std::env::var("CLOB_PROXY_URL")
+    {
+        let original_url = request.url().to_string();
+        let proxied_url = format!("{}/proxy", proxy_url.trim_end_matches('/'));
 
-            #[cfg(feature = "tracing")]
-            tracing::info!(
-                method = %method,
-                original = %original_url,
-                proxy = %proxied_url,
-                "Routing write request through proxy"
-            );
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            method = %method,
+            original = %original_url,
+            proxy = %proxied_url,
+            "Routing write request through proxy"
+        );
 
-            // Rewrite the URL to the proxy endpoint
-            *request.url_mut() = proxied_url.parse().map_err(|err| {
-                Error::status(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    method.clone(),
-                    path.clone(),
-                    format!("Invalid proxy URL: {proxied_url}: {err}"),
-                )
-            })?;
+        // Rewrite the URL to the proxy endpoint
+        *request.url_mut() = proxied_url.parse().map_err(|err| {
+            Error::status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                method.clone(),
+                path.clone(),
+                format!("Invalid proxy URL: {proxied_url}: {err}"),
+            )
+        })?;
 
-            // Set the original URL as the X-Proxy-Url header for the proxy to forward to
-            request.headers_mut().insert(
-                "X-Proxy-Url",
-                original_url
-                    .parse()
-                    .expect("original URL is a valid header value"),
-            );
-        }
+        // Set the original URL as the X-Proxy-Url header for the proxy to forward to
+        request.headers_mut().insert(
+            "X-Proxy-Url",
+            original_url
+                .parse()
+                .expect("original URL is a valid header value"),
+        );
     }
 
     let response = client.execute(request).await?;
